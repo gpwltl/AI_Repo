@@ -9,7 +9,7 @@ export class GetRoomUseCase implements GetRoomInterfaceUseCase {
         this.reservationRepository = reservationRepository;
     }
 
-    async getRoomReservations(roomId: string, date: Date): Promise<Reservation[]> {
+    async getComponents(roomId: string, date: Date): Promise<Reservation[]> {
         // 당일 시작과 끝 시간을 설정
         const startOfDay = new Date(date.setHours(0, 0, 0, 0));
         const endOfDay = new Date(date.setHours(23, 59, 59, 999));

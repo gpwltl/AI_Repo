@@ -37,3 +37,9 @@ next-env.d.ts
 
 # local
 package-lock.json
+
+/prisma/dev.db
+/prisma/migrations/
+.venv
+dev.db
+.env

@@ -49,7 +49,7 @@ const reservations = {
   6: [{ time: "11:00", name: "손흥민" }],
 }
 
-export function RoomReservation() {
+export function Component() {
   const [date, setDate] = React.useState<Date>()
   const [timeSlot, setTimeSlot] = React.useState<string>()
   const [selectedRoom, setSelectedRoom] = React.useState<number | null>(null)

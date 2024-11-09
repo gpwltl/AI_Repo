@@ -3,20 +3,20 @@
 import * as React from "react"
 import { Calendar, Search, MessageCircle, Clock } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { Button } from "../components/ui/button"
+import { Calendar as CalendarComponent } from "../components/ui/calendar"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
+} from "../components/ui/popover"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "../components/ui/select"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,12 +26,12 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "../components/ui/alert-dialog"
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
-} from "@/components/ui/hover-card"
+} from "../components/ui/hover-card"
 import {
   Dialog,
   DialogContent,
@@ -39,7 +39,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
+} from "../components/ui/dialog"
+import { ChatInterface } from "@/components/chat/ChatInterface"
 
 // Sample reservation data with explicit type
 const reservations: Record<string, { time: string; name: string }[]> = {
@@ -54,6 +55,7 @@ export default function Component() {
   const [timeSlot, setTimeSlot] = React.useState<string>()
   const [selectedRoom, setSelectedRoom] = React.useState<number | null>(null)
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 })
+  const [isChatOpen, setIsChatOpen] = React.useState(false)
 
   const today = new Date()
   const days = ['일', '월', '화', '수', '목', '금', '토']
@@ -227,14 +229,27 @@ export default function Component() {
                 <AllRoomsTimetable />
               </DialogContent>
             </Dialog>
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute bottom-[10%] left-[5%] bg-[#3b547b] text-white hover:bg-[#3b547b]/90"
-              aria-label="채팅"
-            >
-              <MessageCircle className="h-4 w-4" />
-            </Button>
+            <Dialog open={isChatOpen} onOpenChange={setIsChatOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="absolute bottom-[10%] left-[5%] bg-[#3b547b] text-white hover:bg-[#3b547b]/90"
+                  aria-label="채팅"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[1000px]">
+                <DialogHeader>
+                  <DialogTitle>대화형 예약 시스템</DialogTitle>
+                  <DialogDescription>
+                    대화를 통해 토론방을 예약해보세요!
+                  </DialogDescription>
+                </DialogHeader>
+                <ChatInterface />
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
