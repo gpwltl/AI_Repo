@@ -1,73 +1,152 @@
-import { useState, useRef, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useChatService } from '@/hooks/useChatService';
+import React, { useState, useRef, useEffect } from 'react';
+import { ChatMessage } from './ChatMessage';
+import { ChatService } from '@/services/ChatService';
+import { v4 as uuidv4 } from 'uuid';
+import { logger } from '@/utils/logger';
+import { LogViewer } from '../LogViewer';
 
-interface Message {
-  content: string;
-  isUser: boolean;
+interface ChatInterfaceProps {
+  messages: Array<{
+    content: string;
+    isBot: boolean;
+  }>;
+  onMessagesChange: (messages: Array<{
+    content: string;
+    isBot: boolean;
+  }>) => void;
 }
 
-export function ChatInterface() {
-  const [message, setMessage] = useState('');
-  const { messages, sendMessage } = useChatService();
+export function ChatInterface({ messages, onMessagesChange }: ChatInterfaceProps) {
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showLogViewer, setShowLogViewer] = useState(false);
+  const chatService = useRef<ChatService | null>(null);
+  const sessionId = useRef<string>(uuidv4());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const initService = async () => {
+      try {
+        if (!chatService.current) {
+          chatService.current = ChatService.getInstance();
+        }
+      } catch (error) {
+        logger.error('ChatService 초기화 실패:', error);
+      }
+    };
+
+    initService();
+    return () => {
+      chatService.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // 메시지가 추가될 때마다 스크롤
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || !chatService.current) return;
 
-  const handleSend = () => {
-    if (message.trim()) {
-      sendMessage(message);
-      setMessage('');
+    const userMessage = input;
+    setInput('');
+    
+    // 사용자 메시지 추가
+    onMessagesChange([...messages, { content: userMessage, isBot: false }]);
+
+    setIsLoading(true);
+    try {
+      // AI 응답 처리
+      const response = await chatService.current.processMessage(
+        sessionId.current,
+        userMessage,
+        (token: string) => {
+          // 스트리밍 처리는 여기서 하지 않음
+        }
+      );
+
+      // AI 응답 추가
+      onMessagesChange([
+        ...messages,
+        { content: userMessage, isBot: false },
+        { content: response, isBot: true }
+      ]);
+    } catch (error) {
+      logger.error('메시지 처리 중 오류:', error);
+      onMessagesChange([
+        ...messages,
+        { content: userMessage, isBot: false },
+        { content: "죄송합니다. 오류가 발생했습니다.", isBot: true }
+      ]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-[600px]">
-      <div className="flex-1 overflow-auto p-6 space-y-4">
-        {messages.map((msg: Message, i: number) => (
-          <div
-            key={i}
-            className={`flex ${
-              msg.isUser ? 'justify-end' : 'justify-start'
-            }`}
-          >
+    <div className="flex flex-col h-[600px] relative">
+      <div className="flex justify-between items-center p-4 border-b">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">대화형 예약 시스템</h2>
+          <p className="text-sm text-gray-600">대화를 통해 토론방을 예약해보세요!</p>
+        </div>
+        <button
+          onClick={() => setShowLogViewer(!showLogViewer)}
+          className="bg-gray-700 text-white px-3 py-1 rounded-lg text-sm hover:bg-gray-600 transition-colors"
+        >
+          {showLogViewer ? '로그 숨기기' : '로그 보기'}
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="space-y-4 max-w-4xl mx-auto">
+          {messages.map((message, index) => (
             <div
-              className={`rounded-lg px-6 py-3 max-w-[70%] text-lg ${
-                msg.isUser
-                  ? 'bg-[#3b547b] text-white'
-                  : 'bg-gray-100 text-gray-900'
-              }`}
+              key={index}
+              className={`flex ${message.isBot ? 'justify-start' : 'justify-end'}`}
             >
-              {msg.content}
+              <div className={`max-w-[80%] ${message.isBot ? 'mr-auto' : 'ml-auto'}`}>
+                <ChatMessage
+                  message={message.content}
+                  isBot={message.isBot}
+                />
+              </div>
             </div>
-          </div>
-        ))}
-        {/* 스크롤 위치를 잡기 위한 더미 div */}
+          ))}
+        </div>
         <div ref={messagesEndRef} />
       </div>
-      <div className="border-t p-6 flex gap-4">
-        <Input
-          className="text-lg"
-          value={message}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMessage(e.target.value)}
-          placeholder="메시지를 입력하세요..."
-          onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSend()}
-        />
-        <Button
-          className="px-8 text-lg"
-          onClick={handleSend}
-        >
-          전송
-        </Button>
-      </div>
+      <form onSubmit={handleSubmit} className="p-4 border-t bg-white">
+        <div className="flex space-x-4 max-w-4xl mx-auto">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="메시지를 입력하세요..."
+            className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isLoading}
+          />
+          <button
+            type="submit"
+            disabled={isLoading}
+            className={`px-4 py-2 rounded-lg transition-colors ${
+              isLoading
+                ? 'bg-gray-300 cursor-not-allowed'
+                : 'bg-blue-500 hover:bg-blue-600 text-white'
+            }`}
+          >
+            {isLoading ? '처리중...' : '전송'}
+          </button>
+        </div>
+      </form>
+
+      {/* 로그 뷰어 */}
+      {showLogViewer && <LogViewer />}
     </div>
   );
 } 

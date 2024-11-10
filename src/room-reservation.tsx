@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Calendar, Search, MessageCircle, Clock } from "lucide-react"
+import { useState } from "react";
 
 import { Button } from "../components/ui/button"
 import { Calendar as CalendarComponent } from "../components/ui/calendar"
@@ -55,7 +56,11 @@ export default function Component() {
   const [timeSlot, setTimeSlot] = React.useState<string>()
   const [selectedRoom, setSelectedRoom] = React.useState<number | null>(null)
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 })
-  const [isChatOpen, setIsChatOpen] = React.useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>>([]);
 
   const today = new Date()
   const days = ['일', '월', '화', '수', '목', '금', '토']
@@ -241,13 +246,10 @@ export default function Component() {
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[1000px]">
-                <DialogHeader>
-                  <DialogTitle>대화형 예약 시스템</DialogTitle>
-                  <DialogDescription>
-                    대화를 통해 토론방을 예약해보세요!
-                  </DialogDescription>
-                </DialogHeader>
-                <ChatInterface />
+                <ChatInterface 
+                  messages={chatMessages}
+                  onMessagesChange={setChatMessages}
+                />
               </DialogContent>
             </Dialog>
           </div>

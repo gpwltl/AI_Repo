@@ -2,7 +2,14 @@ import { useState, useCallback, useMemo } from 'react';
 import { ChatService } from '../services/ChatService';
 
 export function useChatService() {
-  const chatService = useMemo(() => ChatService.getInstance(), []);
+  const chatService = useMemo(() => {
+    const service = ChatService.getInstance();
+    return {
+      sendMessage: async (content: string, onStream: (token: string) => void) => {
+        return service.sendMessage(content, onStream);
+      }
+    };
+  }, []);
 
   const [messages, setMessages] = useState<Array<{
     content: string;

@@ -14,27 +14,35 @@ datasource db {
 }
 
 model User {
-  userId Int @id @default(autoincrement())
-  name   String
-  reservations Reservation[]
+  userId       Int           @id @default(autoincrement())
+  name         String        @unique
+  reservations Reservation[] @relation("UserReservations")
 }
 
 model Room {
-  roomId   Int @id @default(autoincrement())
-  roomName String
-  capacity Int
+  id           Int           @id @default(autoincrement())
+  roomId       Int          @unique
+  roomName     String
+  capacity     Int
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   reservations Reservation[]
 }
 
 model Reservation {
-  reservationId Int @id @default(autoincrement())
-  userId        Int
-  roomId        Int
-  startTime     DateTime
-  endTime       DateTime
-  status        Int
-  regDate       DateTime
+  id         Int      @id @default(autoincrement())
+  roomId     Int
+  userId     Int
+  startTime  DateTime
+  endTime    DateTime
+  userName   String
+  content    String?
+  status     Int      @default(1)  // 1: 활성, 0: 취소
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  room       Room     @relation(fields: [roomId], references: [roomId])
+  user       User     @relation("UserReservations", fields: [userId], references: [userId])
 
-  user User @relation(fields: [userId], references: [userId])
-  room Room @relation(fields: [roomId], references: [roomId])
+  @@index([roomId])
+  @@index([userId])
 } 

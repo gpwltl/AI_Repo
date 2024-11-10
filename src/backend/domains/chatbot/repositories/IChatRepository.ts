@@ -10,7 +10,7 @@ export interface ChatResponse {
   timestamp: Date;
 }
 
-export type StreamCallback = (token: string) => void;
+export type StreamCallback = (response: ChatResponse | string) => void;
 
 export interface IChatRepository {
   sendMessage(message: ChatMessage, onStream: StreamCallback): Promise<ChatResponse>;
