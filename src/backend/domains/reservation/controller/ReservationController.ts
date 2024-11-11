@@ -85,54 +85,26 @@ export class ReservationController {
         }
     }
 
-    async findAvailableRooms(request: NextRequest): Promise<NextResponse> {
+    async findAvailableRooms(searchDate: Date, startTime: string) {
         try {
-            const { searchParams } = new URL(request.url);
-            const date = searchParams.get('date');
-            const time = searchParams.get('time');
-
             logger.log('findAvailableRooms 컨트롤러 호출', {
-                date,
-                time,
-                url: request.url
+                searchDate: searchDate.toISOString(),
+                startTime
             });
 
-            if (!date || !time) {
-                logger.error('필수 파라미터 누락', { date, time });
-                return NextResponse.json(
-                    { message: '날짜와 시간을 모두 입력해주세요.' },
-                    { status: 400 }
-                );
-            }
-
-            const searchDate = new Date(date);
-            logger.log('검색 날짜 파싱', {
-                inputDate: date,
-                parsedDate: searchDate.toISOString()
-            });
-
-            const availableRooms = await this.findAvailableRoomsUseCase.execute(searchDate, time);
+            const availableRooms = await this.findAvailableRoomsUseCase.execute(searchDate, startTime);
             logger.log('사용 가능한 방 조회 완료', {
                 date: searchDate,
-                time,
+                time: startTime,
                 availableRoomsCount: availableRooms.length,
                 availableRooms
             });
 
-            return NextResponse.json({
-                success: true,
-                data: availableRooms
-            });
+            return availableRooms;
 
         } catch (error) {
             logger.error('findAvailableRooms 컨트롤러 에러:', error);
-            return NextResponse.json(
-                { 
-                    success: false,
-                    message: error instanceof Error ? error.message : '검색 중 오류가 발생했습니다.'
-                },
-                { status: 500 }
-            );
+            throw error;
         }
     }
 }

@@ -1,52 +1,53 @@
-import { NextRequest } from 'next/server';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { ReservationController } from '@/backend/domains/reservation/controller/ReservationController';
 import { logger } from '@/utils/logger';
 
-export const config = {
-    runtime: 'edge',
-};
-
 const reservationController = new ReservationController();
 
-export default async function handler(req: NextRequest) {
+export default async function handler(
+    req: NextApiRequest,
+    res: NextApiResponse
+) {
     logger.log('findAvailableRooms API 호출됨', {
         method: req.method,
-        url: req.url
+        query: req.query
     });
 
     if (req.method !== 'GET') {
         logger.error('잘못된 HTTP 메서드', { method: req.method });
-        return new Response(
-            JSON.stringify({ message: 'Method not allowed' }),
-            { 
-                status: 405,
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            }
-        );
+        return res.status(405).json({ message: 'Method not allowed' });
     }
 
     try {
-        const response = await reservationController.findAvailableRooms(req);
+        const { date, time } = req.query;
+
+        if (!date || !time) {
+            return res.status(400).json({
+                success: false,
+                message: '날짜와 시간을 모두 입력해주세요.'
+            });
+        }
+
+        const result = await reservationController.findAvailableRooms(
+            new Date(date as string),
+            time as string
+        );
+
         logger.log('findAvailableRooms API 응답 성공', {
-            status: response.status,
-            url: req.url
+            date,
+            time,
+            result
         });
-        return response;
+
+        return res.status(200).json({
+            success: true,
+            data: result
+        });
     } catch (error) {
         logger.error('findAvailableRooms API 에러:', error);
-        return new Response(
-            JSON.stringify({ 
-                success: false,
-                message: error instanceof Error ? error.message : '서버 오류가 발생했습니다.'
-            }),
-            { 
-                status: 500,
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            }
-        );
+        return res.status(500).json({
+            success: false,
+            message: error instanceof Error ? error.message : '서버 오류가 발생했습니다.'
+        });
     }
 } 

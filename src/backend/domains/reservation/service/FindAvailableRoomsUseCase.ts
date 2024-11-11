@@ -9,31 +9,31 @@ export class FindAvailableRoomsUseCase {
         try {
             logger.log('FindAvailableRoomsUseCase 실행', {
                 searchDate: searchDate.toISOString(),
-                startTime
+                startTime,
+                dayOfWeek: searchDate.getDay()
             });
 
             // 입력값 검증
             if (!this.isValidDate(searchDate)) {
-                logger.error('유효하지 않은 날짜', { 
+                logger.error('과거 날짜 선택됨', { 
                     searchDate,
-                    today: new Date(),
-                    isWeekend: this.isWeekend(searchDate)
+                    today: new Date()
                 });
-                throw new Error('유효하지 않은 날짜입니다.');
+                throw new Error('과거 날짜는 예약할 수 없습니다.');
             }
 
-            if (!this.isValidTime(startTime)) {
-                logger.error('유효하지 않은 시간', { startTime });
-                throw new Error('예약 가능 시간은 09:00-18:00입니다.');
-            }
-
-            // 주말 체크
+            // 주말 체크를 여기서 수행
             if (this.isWeekend(searchDate)) {
                 logger.error('주말 예약 시도', { 
                     searchDate,
                     dayOfWeek: searchDate.getDay()
                 });
                 throw new Error('주말은 예약이 불가능합니다.');
+            }
+
+            if (!this.isValidTime(startTime)) {
+                logger.error('유효하지 않은 시간', { startTime });
+                throw new Error('예약 가능 시간은 09:00-18:00입니다.');
             }
 
             const result = await this.reservationRepository.findAvailableRooms(searchDate, startTime);
@@ -55,10 +55,11 @@ export class FindAvailableRoomsUseCase {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const twoWeeksLater = new Date(today);
-        twoWeeksLater.setDate(today.getDate() + 14);
+        const searchDate = new Date(date);
+        searchDate.setHours(0, 0, 0, 0);
         
-        return date >= today && date <= twoWeeksLater;
+        // 과거 날짜만 체크 (주말 체크는 execute에서 수행)
+        return searchDate >= today;
     }
 
     private isValidTime(time: string): boolean {
