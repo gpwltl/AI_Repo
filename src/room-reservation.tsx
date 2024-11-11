@@ -69,8 +69,8 @@ export default function Component() {
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 })
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{
-    role: 'user' | 'assistant';
     content: string;
+    isBot: boolean;
   }>>([]);
   const [searchResults, setSearchResults] = useState<AvailableRoom[]>([]);
   const [error, setError] = useState<string>('');
@@ -332,7 +332,9 @@ export default function Component() {
               <DialogContent className="sm:max-w-[1000px]">
                 <ChatInterface 
                   messages={chatMessages}
-                  onMessagesChange={setChatMessages}
+                  onMessagesChange={(newMessages) => {
+                    setChatMessages(newMessages);
+                  }}
                 />
               </DialogContent>
             </Dialog>
