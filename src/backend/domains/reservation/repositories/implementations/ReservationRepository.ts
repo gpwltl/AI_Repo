@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import dayjs from 'dayjs';
 import { ReservationEntity } from '../../entity/ReservationEntity';
 import { ReservationInterfaceRepository } from '../interfaces/ReservationInterfaceRepository';
 import { IReservation } from '../../interfaces/IReservation';
@@ -48,16 +47,21 @@ export class ReservationRepository implements ReservationInterfaceRepository {
     ): Promise<ReservationEntity[]> {
         try {
             // 날짜와 시간 조합
-            const startDateTime = dayjs(targetDate).format('YYYY-MM-DD') + ' ' + startHour;
-            const endDateTime = dayjs(targetDate).format('YYYY-MM-DD') + ' ' + endHour;
+            const year = targetDate.getFullYear();
+            const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const day = String(targetDate.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+            
+            const startDateTime = new Date(`${dateStr} ${startHour}`);
+            const endDateTime = new Date(`${dateStr} ${endHour}`);
             
             const reservations = await this.prisma.reservation.findMany({
                 where: {
                     startTime: {
-                        gte: new Date(startDateTime)
+                        gte: startDateTime
                     },
                     endTime: {
-                        lte: new Date(endDateTime)
+                        lte: endDateTime
                     }
                 }
             });
