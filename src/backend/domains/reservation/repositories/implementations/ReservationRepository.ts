@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { ReservationEntity } from '../../entity/ReservationEntity';
 import { ReservationInterfaceRepository } from '../interfaces/ReservationInterfaceRepository';
 import { IReservation, IAvailableRoom } from '../../interfaces/IReservation';
+import { logger } from '@/utils/logger';
 
 export class ReservationRepository implements ReservationInterfaceRepository {
     private prisma: PrismaClient;
@@ -87,10 +88,20 @@ export class ReservationRepository implements ReservationInterfaceRepository {
 
     async findAvailableRooms(searchDate: Date, startTime: string): Promise<IAvailableRoom[]> {
         try {
+            logger.log('findAvailableRooms 레포지토리 호출', {
+                searchDate: searchDate.toISOString(),
+                startTime
+            });
+
             // 날짜와 시간 조합
             const searchDateTime = new Date(`${searchDate.toISOString().split('T')[0]}T${startTime}`);
             const endDateTime = new Date(searchDateTime);
-            endDateTime.setHours(endDateTime.getHours() + 1); // 1시간 단위로 검색
+            endDateTime.setHours(endDateTime.getHours() + 1);
+
+            logger.log('검색 시간 범위 설정', {
+                searchDateTime: searchDateTime.toISOString(),
+                endDateTime: endDateTime.toISOString()
+            });
 
             // 해당 시간대의 모든 예약 검색
             const reservations = await this.prisma.reservation.findMany({
@@ -110,6 +121,11 @@ export class ReservationRepository implements ReservationInterfaceRepository {
                 }
             });
 
+            logger.log('기존 예약 조회 결과', {
+                reservationsCount: reservations.length,
+                reservations
+            });
+
             // 각 방의 가용성 확인
             const availableRooms: IAvailableRoom[] = this.AVAILABLE_ROOMS.map(roomId => {
                 const roomReservations = reservations.filter((r: IReservation) => r.roomId === roomId);
@@ -120,10 +136,15 @@ export class ReservationRepository implements ReservationInterfaceRepository {
                 };
             });
 
+            logger.log('방별 가용성 확인 완료', {
+                availableRooms,
+                availableRoomsCount: availableRooms.filter(r => r.isAvailable).length
+            });
+
             return availableRooms;
 
         } catch (error) {
-            console.error('방 검색 중 오류 발생:', error);
+            logger.error('findAvailableRooms 레포지토리 에러:', error);
             throw new Error('방 검색 중 오류가 발생했습니다.');
         }
     }

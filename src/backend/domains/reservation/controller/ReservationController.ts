@@ -3,6 +3,7 @@ import { CreateReservationUseCase } from '../service/CreateReservationUseCase';
 import { ReservationRepository } from '../repositories/implementations/ReservationRepository';
 import { FindReservationsByDateTimeUseCase } from '../service/FindReservationsByDateTimeUseCase';
 import { FindAvailableRoomsUseCase } from '../service/FindAvailableRoomsUseCase';
+import { logger } from '@/utils/logger';
 
 export class ReservationController {
     private createReservationUseCase: CreateReservationUseCase;
@@ -90,7 +91,14 @@ export class ReservationController {
             const date = searchParams.get('date');
             const time = searchParams.get('time');
 
+            logger.log('findAvailableRooms 컨트롤러 호출', {
+                date,
+                time,
+                url: request.url
+            });
+
             if (!date || !time) {
+                logger.error('필수 파라미터 누락', { date, time });
                 return NextResponse.json(
                     { message: '날짜와 시간을 모두 입력해주세요.' },
                     { status: 400 }
@@ -98,7 +106,18 @@ export class ReservationController {
             }
 
             const searchDate = new Date(date);
+            logger.log('검색 날짜 파싱', {
+                inputDate: date,
+                parsedDate: searchDate.toISOString()
+            });
+
             const availableRooms = await this.findAvailableRoomsUseCase.execute(searchDate, time);
+            logger.log('사용 가능한 방 조회 완료', {
+                date: searchDate,
+                time,
+                availableRoomsCount: availableRooms.length,
+                availableRooms
+            });
 
             return NextResponse.json({
                 success: true,
@@ -106,6 +125,7 @@ export class ReservationController {
             });
 
         } catch (error) {
+            logger.error('findAvailableRooms 컨트롤러 에러:', error);
             return NextResponse.json(
                 { 
                     success: false,

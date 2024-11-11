@@ -3,8 +3,8 @@
 import * as React from "react"
 import { Calendar, Search, MessageCircle, Clock } from "lucide-react"
 import { useState } from "react";
-
 import { Button } from "../components/ui/button"
+
 import { Calendar as CalendarComponent } from "../components/ui/calendar"
 import {
   Popover,
@@ -43,6 +43,17 @@ import {
 } from "../components/ui/dialog"
 import { ChatInterface } from "@/components/chat/ChatInterface"
 
+interface AvailableRoom {
+  roomId: number;
+  isAvailable: boolean;
+  conflictingReservations?: Array<{
+    id: number;
+    userId: number;
+    startTime: string;
+    endTime: string;
+  }>;
+}
+
 // Sample reservation data with explicit type
 const reservations: Record<string, { time: string; name: string }[]> = {
   1: [{ time: "10:00", name: "김철수" }],
@@ -61,14 +72,39 @@ export default function Component() {
     role: 'user' | 'assistant';
     content: string;
   }>>([]);
+  const [searchResults, setSearchResults] = useState<AvailableRoom[]>([]);
+  const [error, setError] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const today = new Date()
   const days = ['일', '월', '화', '수', '목', '금', '토']
   const timeSlots = Array.from({ length: 9 }, (_, i) => `${i + 9}:00`)
 
-  const handleSearch = () => {
-    console.log("Searching for:", { date, timeSlot })
-  }
+  const handleSearch = async () => {
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(
+        `/api/reservation/findAvailableRooms?date=${date?.toISOString().split('T')[0]}&time=${timeSlot}`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || '검색 중 오류가 발생했습니다.');
+      }
+
+      if (data.success) {
+        setSearchResults(data.data);
+      } else {
+        setError(data.message);
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '검색 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleRoomClick = (roomNumber: number) => {
     setSelectedRoom(roomNumber)
@@ -132,6 +168,54 @@ export default function Component() {
             </Button>
           </div>
         </div>
+
+        {error && (
+          <div className="mb-4 rounded-md bg-red-100 p-4 text-red-700">
+            {error}
+          </div>
+        )}
+
+        {searchResults.length > 0 && (
+          <div className="mb-8 rounded-lg bg-white p-4 shadow-md">
+            <h3 className="mb-4 text-lg font-semibold">검색 결과</h3>
+            <div className="space-y-3">
+              {searchResults.map((room) => (
+                <div
+                  key={room.roomId}
+                  className={`rounded-lg border p-4 ${
+                    room.isAvailable 
+                      ? 'border-green-200 bg-green-50' 
+                      : 'border-red-200 bg-red-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">
+                      토론방 {room.roomId}
+                    </span>
+                    <span className={`rounded-full px-3 py-1 text-sm ${
+                      room.isAvailable 
+                        ? 'bg-green-200 text-green-800' 
+                        : 'bg-red-200 text-red-800'
+                    }`}>
+                      {room.isAvailable ? '예약 가능' : '예약 불가'}
+                    </span>
+                  </div>
+                  {!room.isAvailable && room.conflictingReservations && room.conflictingReservations.length > 0 && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      <p>예약 중인 시간:</p>
+                      {room.conflictingReservations.map((reservation, idx) => (
+                        <p key={idx} className="ml-2">
+                          {new Date(reservation.startTime).toLocaleTimeString()} ~ 
+                          {new Date(reservation.endTime).toLocaleTimeString()}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="relative mx-auto max-w-4xl rounded-lg border-2 border-[#3b547b] p-4">
           <div className="aspect-[2/1] w-full" onMouseMove={handleMouseMove}>
