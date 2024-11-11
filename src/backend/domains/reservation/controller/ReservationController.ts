@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CreateReservationUseCase } from '../service/CreateReservationUseCase';
 import { ReservationRepository } from '../repositories/implementations/ReservationRepository';
 import { FindReservationsByDateTimeUseCase } from '../service/FindReservationsByDateTimeUseCase';
+import { FindAvailableRoomsUseCase } from '../service/FindAvailableRoomsUseCase';
 
 export class ReservationController {
     private createReservationUseCase: CreateReservationUseCase;
     private findReservationsByDateTimeUseCase: FindReservationsByDateTimeUseCase;
+    private findAvailableRoomsUseCase: FindAvailableRoomsUseCase;
 
     constructor() {
         const reservationRepository = new ReservationRepository();
         this.createReservationUseCase = new CreateReservationUseCase(reservationRepository);
         this.findReservationsByDateTimeUseCase = new FindReservationsByDateTimeUseCase(reservationRepository);
+        this.findAvailableRoomsUseCase = new FindAvailableRoomsUseCase(reservationRepository);
     }
 
     async createReservation(request: NextRequest): Promise<NextResponse> {
@@ -75,6 +78,38 @@ export class ReservationController {
             return NextResponse.json(
                 {
                     message: error instanceof Error ? error.message : 'Internal server error'
+                },
+                { status: 500 }
+            );
+        }
+    }
+
+    async findAvailableRooms(request: NextRequest): Promise<NextResponse> {
+        try {
+            const { searchParams } = new URL(request.url);
+            const date = searchParams.get('date');
+            const time = searchParams.get('time');
+
+            if (!date || !time) {
+                return NextResponse.json(
+                    { message: '날짜와 시간을 모두 입력해주세요.' },
+                    { status: 400 }
+                );
+            }
+
+            const searchDate = new Date(date);
+            const availableRooms = await this.findAvailableRoomsUseCase.execute(searchDate, time);
+
+            return NextResponse.json({
+                success: true,
+                data: availableRooms
+            });
+
+        } catch (error) {
+            return NextResponse.json(
+                { 
+                    success: false,
+                    message: error instanceof Error ? error.message : '검색 중 오류가 발생했습니다.'
                 },
                 { status: 500 }
             );

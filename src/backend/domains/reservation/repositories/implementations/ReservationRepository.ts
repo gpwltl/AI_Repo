@@ -1,10 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { ReservationEntity } from '../../entity/ReservationEntity';
 import { ReservationInterfaceRepository } from '../interfaces/ReservationInterfaceRepository';
-import { IReservation } from '../../interfaces/IReservation';
+import { IReservation, IAvailableRoom } from '../../interfaces/IReservation';
 
 export class ReservationRepository implements ReservationInterfaceRepository {
     private prisma: PrismaClient;
+    private readonly AVAILABLE_ROOMS = [1, 4, 5, 6];
 
     constructor() {
         this.prisma = new PrismaClient();
@@ -81,6 +82,49 @@ export class ReservationRepository implements ReservationInterfaceRepository {
                 throw new Error(`Failed to find reservations: ${error.message}`);
             }
             throw new Error('Failed to find reservations: Unknown error');
+        }
+    }
+
+    async findAvailableRooms(searchDate: Date, startTime: string): Promise<IAvailableRoom[]> {
+        try {
+            // 날짜와 시간 조합
+            const searchDateTime = new Date(`${searchDate.toISOString().split('T')[0]}T${startTime}`);
+            const endDateTime = new Date(searchDateTime);
+            endDateTime.setHours(endDateTime.getHours() + 1); // 1시간 단위로 검색
+
+            // 해당 시간대의 모든 예약 검색
+            const reservations = await this.prisma.reservation.findMany({
+                where: {
+                    AND: [
+                        {
+                            startTime: {
+                                lte: endDateTime
+                            }
+                        },
+                        {
+                            endTime: {
+                                gt: searchDateTime
+                            }
+                        }
+                    ]
+                }
+            });
+
+            // 각 방의 가용성 확인
+            const availableRooms: IAvailableRoom[] = this.AVAILABLE_ROOMS.map(roomId => {
+                const roomReservations = reservations.filter((r: IReservation) => r.roomId === roomId);
+                return {
+                    roomId,
+                    isAvailable: roomReservations.length === 0,
+                    conflictingReservations: roomReservations
+                };
+            });
+
+            return availableRooms;
+
+        } catch (error) {
+            console.error('방 검색 중 오류 발생:', error);
+            throw new Error('방 검색 중 오류가 발생했습니다.');
         }
     }
 }

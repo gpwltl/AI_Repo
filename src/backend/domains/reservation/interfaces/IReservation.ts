@@ -6,4 +6,10 @@ export interface IReservation {
     endTime: Date;
     status: number;
     regdate: Date;
+}
+
+export interface IAvailableRoom {
+    roomId: number;
+    isAvailable: boolean;
+    conflictingReservations?: IReservation[];
 } 
