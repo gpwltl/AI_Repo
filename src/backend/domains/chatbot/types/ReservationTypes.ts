@@ -1,5 +1,6 @@
 export interface ReservationInfo {
-  date?: Date;
+  date?: Date | string;
+  timeRange?: string;
   startTime?: string;
   duration?: number;
   roomId?: number;

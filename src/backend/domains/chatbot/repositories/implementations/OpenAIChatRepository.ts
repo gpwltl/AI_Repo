@@ -1,14 +1,11 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { IChatRepository, ChatMessage, ChatResponse, StreamCallback } from "../IChatRepository";
 import { logger } from '@/utils/logger';
-import { Serialized } from "@langchain/core/load/serializable";
 import { ReservationTools } from '../../tools/ToolDefinitions';
 import { SQLiteReservationTool } from '../../tools/implementations/SQLiteReservationTool';
 import { AgentExecutor, createOpenAIFunctionsAgent } from "langchain/agents";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
-import { AgentStep } from "langchain/agents";
 import { ChatSessionEntity, ReservationInfo } from '../entity/ChatSessionEntity';
-import { SessionManager } from '../../service/SessionManager';
 
 export class OpenAIChatRepository implements IChatRepository {
   private static instance: OpenAIChatRepository;
@@ -37,7 +34,7 @@ export class OpenAIChatRepository implements IChatRepository {
       logger.log('ChatOpenAI 모델 초기화 시작');
       this.model = new ChatOpenAI({
         openAIApiKey: apiKey,
-        modelName: "gpt-4o-mini",
+        modelName: "gpt-4o",
         temperature: 0.7,
         streaming: true,
       });
@@ -153,115 +150,18 @@ export class OpenAIChatRepository implements IChatRepository {
         this.sessions.set(message.userId, session);
       }
 
-      // 사용자 메시지를 히스토리에 추가
+      // 메시지 히스토리에 추가
       session.addMessage('user', message.content);
-      this.messageHistory.push({ role: 'user', content: message.content });
-
-      // 날짜 정보 추출 시도
-      if (!session.getReservationInfo().date) {
-        if (message.content.includes('다음주')) {
-          const dayMatch = message.content.match(/(월|화|수|목|금)요일/);
-          if (dayMatch) {
-            const dayMap: { [key: string]: number } = {
-              '월': 1, '화': 2, '수': 3, '목': 4, '금': 5
-            };
-            const targetDate = this.getNextWeekday(dayMap[dayMatch[1]]);
-            session.updateReservationInfo({ date: targetDate });
-            logger.log('날짜 정보 저장:', {
-              input: message.content,
-              extractedDate: targetDate.toISOString()
-            });
-          }
-        }
-      }
-
-      // 다른 예약 정보 파싱 및 업데이트
-      const reservationInfo = await this.extractReservationInfo(message.content, message.userId);
-      if (reservationInfo) {
-        session.updateReservationInfo(reservationInfo);
-        logger.log('예약 정보 업데이트:', {
-          sessionId: message.userId,
-          updatedInfo: reservationInfo,
-          currentState: session.getReservationInfo()
-        });
-      }
-
-      const response = await this.executeWithRetry(message, onStream);
       
-      // AI 응답을 히스토리에 추가
-      session.addMessage('assistant', response.content);
-      this.messageHistory.push({ role: 'assistant', content: response.content });
-
-      return response;
-    } catch (error) {
-      logger.error('메시지 처리 실패:', error);
-      return {
-        content: '죄송합니다. 요청을 처리하는 중에 오류가 발생했습니다.',
-        userId: 'bot',
-        timestamp: new Date()
-      };
-    }
-  }
-
-  private async extractReservationInfo(message: string, sessionId: string): Promise<Partial<ReservationInfo> | null> {
-    try {
-      const session = this.sessions.get(sessionId);
-      if (!session) return null;
-
+      // 현재 예약 정보 가져오기
       const currentInfo = session.getReservationInfo();
-      const info: Partial<ReservationInfo> = {};
+      
+      // Agent 컨텍스트 구성
+      const contextMessage = this.buildContextMessage(message.content, currentInfo, session.getRecentMessages(5));
 
-      // 시간 정보 파싱
-      if (message.includes('~')) {
-        const timeMatch = message.match(/(\d{1,2})~(\d{1,2})시/);
-        if (timeMatch) {
-          const [_, startHour, endHour] = timeMatch;
-          info.startTime = `${startHour.padStart(2, '0')}:00`;
-          info.duration = Number(endHour) - Number(startHour);
-        }
-      }
-
-      // 이름과 목적 파싱
-      const nameMatch = message.match(/나는\s+([가-힣]+)이고/);
-      const purposeMatch = message.match(/이고\s+(.+?)\s*(?:할거야|합니다|해요|할게요)$/);
-
-      if (nameMatch) info.userName = nameMatch[1];
-      if (purposeMatch) info.content = purposeMatch[1];
-
-      // 기존 정보 유지
-      return {
-        ...currentInfo,
-        ...info
-      };
-    } catch (error) {
-      logger.error('예약 정보 추출 실패:', error);
-      return null;
-    }
-  }
-
-  private async executeWithRetry(message: ChatMessage, onStream: StreamCallback): Promise<ChatResponse> {
-    try {
-      const session = this.sessions.get(message.userId);
-      if (!session) {
-        throw new Error('세션을 찾을 수 없습니다.');
-      }
-
-      // 예약 정보 추출
-      const reservationInfo = await this.extractReservationInfo(message.content, message.userId);
-      if (reservationInfo) {
-        session.updateReservationInfo(reservationInfo);
-      }
-
-      const currentInfo = session.getReservationInfo();
-      const { contextualQuery } = this.buildCombinedContext(message, currentInfo);
-
-      if (!this.agent) {
-        throw new Error('Agent가 초기화되지 않았습니다.');
-      }
-
-      // Agent를 통한 실행
-      const result = await this.agent.invoke({
-        input: contextualQuery,
+      // Agent 실행
+      const result = await this.agent?.invoke({
+        input: contextMessage,
         callbacks: [{
           handleLLMNewToken: (token: string) => {
             onStream(token);
@@ -269,99 +169,53 @@ export class OpenAIChatRepository implements IChatRepository {
         }]
       });
 
-      // 예약 생성 조건 확인
-      if (this.isReadyToCreateReservation(currentInfo)) {
-        return await this.createReservation(session, currentInfo);
-      }
+      if (!result) throw new Error('Agent 응답 없음');
 
-      return {
+      // 응답 저장
+      const response = {
         content: result.output,
         userId: 'bot',
         timestamp: new Date()
       };
 
+      session.addMessage('assistant', response.content);
+      return response;
+
     } catch (error) {
-      if (this.retryCount < this.maxRetries) {
-        this.retryCount++;
-        return this.executeWithRetry(message, onStream);
-      }
-      logger.error('실행 중 오류 발생:', error);
+      logger.error('메시지 처리 실패:', error);
       throw error;
-    } finally {
-      this.retryCount = 0;
     }
   }
 
-  private isReadyToCreateReservation(info: ReservationInfo): boolean {
-    return !!(
-      info.date &&
-      info.startTime &&
-      info.duration &&
-      info.userName &&
-      info.content
-    );
-  }
+  private buildContextMessage(
+    message: string,
+    reservationInfo: ReservationInfo,
+    recentMessages: Array<{role: 'user' | 'assistant', content: string}>
+  ): string {
+    const contextParts = [];
 
-  private async createReservation(session: ChatSessionEntity, reservationInfo: ReservationInfo): Promise<ChatResponse> {
-    if (!this.agent) throw new Error('Agent not initialized');
-    
-    const result = await this.agent.invoke({
-        input: `create_reservation
-            date: ${reservationInfo.date?.toISOString()}
-            startTime: ${reservationInfo.startTime}
-            duration: ${reservationInfo.duration}
-            roomId: ${reservationInfo.roomId}
-            userName: ${reservationInfo.userName}
-            content: ${reservationInfo.content}
-        `
-    });
-
-    if (result?.output?.includes('예약이 완료되었습니다')) {
-        return {
-            content: result.output,
-            userId: 'bot',
-            timestamp: new Date()
-        };
+    // 예약 정보 포함
+    if (Object.keys(reservationInfo).length > 0) {
+      contextParts.push('현재 예약 정보:');
+      Object.entries(reservationInfo).forEach(([key, value]) => {
+        if (value !== undefined) {
+          contextParts.push(`${key}: ${value instanceof Date ? value.toLocaleDateString() : value}`);
+        }
+      });
+      contextParts.push('');
     }
 
-    throw new Error('예약 생성 실패');
-  }
-
-  private buildCombinedContext(message: ChatMessage, reservationInfo: ReservationInfo) {
-    // 이전 대화에서 확인된 정보 수집
-    const previousContext = {
-      confirmedDate: reservationInfo.date ? 
-        `이전 대화에서 확인된 날짜: ${reservationInfo.date.toLocaleDateString()}` : '',
-      confirmedTime: reservationInfo.startTime ? 
-        `확인된 시작 시간: ${reservationInfo.startTime}` : '',
-      confirmedDuration: reservationInfo.duration ? 
-        `확인된 예약 시간: ${reservationInfo.duration}시간` : '',
-      confirmedName: reservationInfo.userName ? 
-        `예약자 이름: ${reservationInfo.userName}` : '',
-      confirmedPurpose: reservationInfo.content ? 
-        `회의 목적: ${reservationInfo.content}` : ''
-    };
-
-    // 이전 맥락과 현재 메시지를 결합
-    const contextualQuery = [
-      previousContext.confirmedDate,
-      previousContext.confirmedTime,
-      previousContext.confirmedDuration,
-      previousContext.confirmedName,
-      previousContext.confirmedPurpose,
-      `현재 요청: ${message.content}`
-    ].filter(Boolean).join('\n');
-
-    logger.log('대화 맥락 구성:', {
-      previousContext,
-      contextualQuery,
-      currentMessage: message.content
+    // 최근 대화 내역 포함
+    contextParts.push('최근 대화:');
+    recentMessages.forEach(msg => {
+      contextParts.push(`${msg.role === 'user' ? '사용자' : 'AI'}: ${msg.content}`);
     });
+    contextParts.push('');
 
-    return {
-      contextualQuery,
-      previousContext
-    };
+    // 현재 메시지 추가
+    contextParts.push(`현재 메시지: ${message}`);
+
+    return contextParts.join('\n');
   }
 
   // 대화 히스토리 관리 메서드 추가
